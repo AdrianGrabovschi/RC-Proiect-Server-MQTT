@@ -37,7 +37,9 @@ class Server:
         if data:
             printLog('recv', 'Server recived ' + str(addr) + ': ' + str(data))
 
-            packet_type = PACKET_TYPE(struct.unpack('!H', data[0:2])[0])
+            # packet_code = struct.unpack('B', data[0:1])[0] >> 4
+            # printLog('Packet Code', str(addr) + ' -> ' + str(packet_code))
+            packet_type = PACKET_TYPE(struct.unpack('B', data[0:1])[0] >> 4)
             printLog('Packet Type', str(addr) + ' -> ' + packet_type.name)
 
             currentPacket = Packet(conn, addr, packet_type, data)
