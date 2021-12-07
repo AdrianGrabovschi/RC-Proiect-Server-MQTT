@@ -47,13 +47,16 @@ class Server:
             match packet_type:
                 case PACKET_TYPE.CONNECT:
                     HandleCONNECT(self, currentPacket)
-                case PACKET_TYPE.CONNACK:
-                    return False
+                case PACKET_TYPE.DISCONNECT:
+                    HandleCONNECT(self, currentPacket)
                 case _:  # default
                     printLog('ERROR', 'Invalid Packet: ' + packet_type.name)
 
         else:
             printLog('ERROR', str(addr) + ' -> Empty Packet')
+
+    def sendPacket(self, packet):
+        packet.conn.sendall(packet.data)
 
     def dummy(self):
         print("dummmyymsdjkfghjksadf")
