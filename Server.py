@@ -33,24 +33,25 @@ class Server:
             threading.Thread(target=self.handlePacket, args=(conn, addr)).start()
 
     def handlePacket(self, conn, addr):
-        data = conn.recv(1024)
-        if data:
-            printLog('recv', 'Server recived ' + str(addr) + ': ' + str(data))
+        while True:
+            data = conn.recv(1024)
+            if data:
+                printLog('recv', 'Server recived ' + str(addr) + ': ' + str(data))
 
-            # packet_code = struct.unpack('B', data[0:1])[0] >> 4
-            # printLog('Packet Code', str(addr) + ' -> ' + str(packet_code))
-            packet_type = PACKET_TYPE(struct.unpack('B', data[0:1])[0] >> 4)
-            printLog('Packet Type', str(addr) + ' -> ' + packet_type.name)
+                # packet_code = struct.unpack('B', data[0:1])[0] >> 4
+                # printLog('Packet Code', str(addr) + ' -> ' + str(packet_code))
+                packet_type = PACKET_TYPE(struct.unpack('B', data[0:1])[0] >> 4)
+                printLog('Packet Type', str(addr) + ' -> ' + packet_type.name)
 
-            currentPacket = Packet(conn, addr, packet_type, data)
+                currentPacket = Packet(conn, addr, packet_type, data)
 
-            match packet_type:
-                case PACKET_TYPE.CONNECT:
-                    HandleCONNECT(self, currentPacket)
-                case PACKET_TYPE.DISCONNECT:
-                    HandleCONNECT(self, currentPacket)
-                case _:  # default
-                    printLog('ERROR', 'Invalid Packet: ' + packet_type.name)
+                match packet_type:
+                    case PACKET_TYPE.CONNECT:
+                        HandleCONNECT(self, currentPacket)
+                    case PACKET_TYPE.DISCONNECT:
+                        HandleDISCONNECT(self, currentPacket)
+                    case _:  # default
+                        printLog('ERROR', 'Invalid Packet: ' + packet_type.name)
 
         else:
             printLog('ERROR', str(addr) + ' -> Empty Packet')
