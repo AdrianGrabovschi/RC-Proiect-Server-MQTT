@@ -41,33 +41,31 @@ def getPacketRemainingLength(packet):
         index += 1
     return index + 1, value
 
+def parsePacketString(data, offset):
+    str_len = struct.unpack('!H', data[offset : offset + 2])[0]
+    printLog('DEBUG - len',  str_len)
+
+    string = struct.unpack(str(str_len) + 's', data[offset + 2 : offset + 2 + str_len])[0]
+    printLog('DEBUG - str', string)
+
+    return offset + str_len + 2, string
+
+
 def HandleCONNECT(server, packet):
     # primii doi bytes irelevanti
 
     (rlOffset, rlLen) = getPacketRemainingLength(packet)
-    Offset = rlOffset
-    printLog('DEBUG - Offset', Offset)
+    offset = rlOffset
+    printLog('DEBUG - Offset', offset)
 
-    protocol_name_len = struct.unpack('!H', packet.data[Offset : Offset + 2])[0]
-    Offset += 2
-    printLog('DEBUG - protocol_name_len', protocol_name_len)
+    offset, protocol_name = parsePacketString(packet.data, offset)
 
-    protocol_name = struct.unpack(str(protocol_name_len) + 's', packet.data[Offset : Offset + protocol_name_len])[0]
-    Offset += protocol_name_len
-    printLog('DEBUG - protocol_name', protocol_name)
-
-    protocol_level, conn_flags, keep_alive = struct.unpack('!BBH', packet.data[Offset : Offset + 4])
-    Offset += 4
+    protocol_level, conn_flags, keep_alive = struct.unpack('!BBH', packet.data[offset : offset + 4])
+    offset += 4
     printLog('DEBUG - protocol_level', protocol_level)
     printLog('DEBUG - conn_flags', conn_flags)
     printLog('DEBUG - keep_alive', keep_alive)
 
-    client_id_len = struct.unpack('!H', packet.data[Offset : Offset + 2])[0]
-    Offset += 2
-    printLog('DEBUG - client_id_len', client_id_len)
+    offset, client_id = parsePacketString(packet.data, offset)
 
-    client_id = struct.unpack(str(client_id_len) + 's', packet.data[Offset : Offset + client_id_len])[0]
-    Offset += client_id_len
-    printLog('DEBUG - client_id', client_id)
 
-    # bla bla gestiune client
