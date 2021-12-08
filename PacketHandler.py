@@ -1,4 +1,6 @@
 from enum import Enum
+
+from Client import *
 from Server import *
 from Utils  import *
 import struct
@@ -117,7 +119,6 @@ def HandleCONNECT(server, packet):
         offset, will_message = parsePacketString(packet.data, offset)
         printLog("will_message", will_message)
 
-
     user_name = ''
     if conn_flags & CONNECTION_FLAGS.USER_NAME.value:
         offset, user_name = parsePacketString(packet.data, offset)
@@ -132,8 +133,11 @@ def HandleCONNECT(server, packet):
 
     # daca e totu ca la abecedar trimitem connack-ul
     to_send_packet = generateCONNACKPacket(packet.conn, packet.addr, 0) # 0 -> ACCEPTED
-    printLog('SEND DATA', str(packet.addr) + ' -> ' + str(to_send_packet.data))
     server.sendPacket(to_send_packet)
+
+    new_client = Client(client_id, keep_alive, user_name, password)
+    server.clients[new_client.clientID] = new_client
+
 
 def HandleDISCONNECT(server, packet):
     printLog('NEW-PACKET -> DISCONNECT', '--------------------------------------------------------------')
