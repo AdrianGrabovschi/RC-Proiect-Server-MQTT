@@ -63,9 +63,9 @@ def parsePacketString(data, offset):
 
     return offset + str_len + 2, string
 
-def generateCONNACKPacket(conn, addr, returnCode):
+def generateCONNACKPacket(conn, addr, sp_bit, returnCode):
     packet = Packet(conn, addr, PACKET_TYPE.CONNACK)
-    packet.data = struct.pack('BBBB', PACKET_TYPE.CONNACK.value << 4, 2, 0, returnCode)
+    packet.data = struct.pack('BBBB', PACKET_TYPE.CONNACK.value << 4, 2, sp_bit, returnCode)
     #                                           ^1                    ^2 ^3      ^4
     # 1 -> packet type
     # 2 -> variable header length
@@ -93,6 +93,11 @@ def HandleCONNECT(server, packet):
 
     if conn_flags & CONNECTION_FLAGS.CLEAN_SESSION.value:
         printLog("CONN_FLAG", 'YUHUHUI, are FLAG de CLEAN_SESSION')
+        sp_connack_bit = 0
+    else:
+        #implementare pentru clean session 0(daca serverul a stocat sesiunea, sp_connack_bit = 1, altfel 0)
+        pass
+
 
     if conn_flags & CONNECTION_FLAGS.WILL_FLAG.value:
         printLog("CONN_FLAG", 'YUHUHUI, are FLAG de WILL_FLAG')
@@ -130,15 +135,27 @@ def HandleCONNECT(server, packet):
         printLog("password: ", password)
 
     #TODO aici vin checkuri pentru corectitudinea datelor, ne apucam de connack si vedem dupa care e mersul aici
+    return_code = 0
+    if protocol_level != 4:
+        return_code = 1
+
 
     # daca e totu ca la abecedar trimitem connack-ul
-    to_send_packet = generateCONNACKPacket(packet.conn, packet.addr, 0) # 0 -> ACCEPTED
+    to_send_packet = generateCONNACKPacket(packet.conn, packet.addr,sp_connack_bit, return_code) # 0 -> ACCEPTED
     server.sendPacket(to_send_packet)
 
-    new_client = Client(client_id, keep_alive, user_name, password)
-    server.clients[new_client.clientID] = new_client
+    new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name, password)
+    server.clients[new_client.addr] = new_client
+    print(server.clients)
+
 
 
 def HandleDISCONNECT(server, packet):
     printLog('NEW-PACKET -> DISCONNECT', '--------------------------------------------------------------')
     printLog('DISCONNECT', 'say byebye to ' + str(packet.addr))
+    printLog('addr[0]', packet.addr[0])
+    printLog('addr[1]', packet.addr[1])
+    del server.clients[packet.addr]
+
+   # print(server.clients)
+
