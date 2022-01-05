@@ -3,7 +3,7 @@ import sys
 import threading
 import time
 import datetime
-
+#clasa timer in threading
 
 class Clock(threading.Thread):
     def __init__(self, interval, tick):

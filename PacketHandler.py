@@ -72,6 +72,11 @@ def generateCONNACKPacket(conn, addr, sp_bit, returnCode):
     # 3 -> Connect Acknowledge Flags x00 mereu din fericire
     # 4 -> code return-ul CONNACK-ului
     return packet
+def generatePINGRESPPacket(conn, addr):
+    packet = Packet(conn, addr, PACKET_TYPE.PINGRESP)
+    packet.data = struct.pack('BB',  PACKET_TYPE.PINGRESP.value << 4, 0)
+
+    return packet
 
 def HandleCONNECT(server, packet):
     printLog('NEW-PACKET -> CONNECT', '--------------------------------------------------------------')
@@ -148,6 +153,15 @@ def HandleCONNECT(server, packet):
     server.clients[new_client.addr] = new_client
     print(server.clients)
 
+def HandlePUBLISH(server, packet):
+    printLog('NEW-PACKET -> PUBLISH', '--------------------------------------------------------------')
+
+
+def HandlePINGREQ(server, packet):
+    printLog('NEW-PACKET -> PINGREQ', '--------------------------------------------------------------')
+    to_send_packet = generatePINGRESPPacket(packet.conn, packet.addr)
+
+    server.sendPacket(to_send_packet)
 
 
 def HandleDISCONNECT(server, packet):

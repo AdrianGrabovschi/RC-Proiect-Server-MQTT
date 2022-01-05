@@ -68,12 +68,16 @@ class Server:
             match packet_type:
                 case PACKET_TYPE.CONNECT:
                     HandleCONNECT(self, currentPacket)
+                case PACKET_TYPE.PUBLISH:
+                    HandlePUBLISH(self, currentPacket)
+                case PACKET_TYPE.PINGREQ:
+                    HandlePINGREQ(self, currentPacket)
                 case PACKET_TYPE.DISCONNECT:
                     HandleDISCONNECT(self, currentPacket)
                 case _:  # default
                     printLog('ERROR', 'Invalid Packet: ' + packet_type.name)
 
-        printLog('INFO', str(addr) + 'disconnected from server')
+        printLog('INFO', str(addr) + ' disconnected from server')
         conn.close()
 
     def sendPacket(self, packet):
