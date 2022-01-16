@@ -1,4 +1,4 @@
-from server.Server import *
+from Server import *
 from interface.Interface import *
 
 #from App import *
@@ -9,5 +9,5 @@ if __name__ == "__main__":
     server = Server(SERVER_HOST, SERVER_PORT)
     server.start()
 
-    #interface = Interface()
-    #interface.create()
+    interface = Interface()
+    interface.create()

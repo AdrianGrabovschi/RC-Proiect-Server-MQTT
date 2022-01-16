@@ -1,8 +1,8 @@
-from enum import Enum
-
-from Server import *
-from Utils  import *
 import struct
+from enum import Enum
+from Server import *
+from Utils import *
+from Client import *
 
 class Packet:
     def __init__(self, _conn, _addr, _packet_type, _data=None):
@@ -55,10 +55,10 @@ def getPacketRemainingLength(packet):
 
 def parsePacketString(data, offset):
     str_len = struct.unpack('!H', data[offset : offset + 2])[0]
-    printLog('DEBUG parse-Packet-String - len',  str_len)
+    #printLog('parse-Packet-String - len',  str_len)
 
     string = struct.unpack(str(str_len) + 's', data[offset + 2 : offset + 2 + str_len])[0]
-    printLog('DEBUG parse-Packet-String - str', string)
+    #printLog('parse-Packet-String - str', string)
 
     return offset + str_len + 2, string
 
@@ -71,6 +71,7 @@ def generateCONNACKPacket(conn, addr, sp_bit, returnCode):
     # 3 -> Connect Acknowledge Flags x00 mereu din fericire
     # 4 -> code return-ul CONNACK-ului
     return packet
+
 def generatePINGRESPPacket(conn, addr):
     packet = Packet(conn, addr, PACKET_TYPE.PINGRESP)
     packet.data = struct.pack('BB',  PACKET_TYPE.PINGRESP.value << 4, 0)
@@ -83,74 +84,73 @@ def HandleCONNECT(server, packet):
     # primii doi bytes irelevanti
     (rlOffset, rlLen) = getPacketRemainingLength(packet)
     offset = rlOffset
-    printLog('DEBUG - Offset', offset)
 
     offset, protocol_name = parsePacketString(packet.data, offset)
 
     protocol_level, conn_flags, keep_alive = struct.unpack('!BBH', packet.data[offset : offset + 4])
     offset += 4
-    printLog('DEBUG - protocol_level', protocol_level)
-    printLog('DEBUG - conn_flags', conn_flags)
-    printLog('DEBUG - keep_alive', keep_alive)
 
     offset, client_id = parsePacketString(packet.data, offset)
 
     if conn_flags & CONNECTION_FLAGS.CLEAN_SESSION.value:
-        printLog("CONN_FLAG", 'YUHUHUI, are FLAG de CLEAN_SESSION')
+        #printLog("CONN_FLAG", 'YUHUHUI, are FLAG de CLEAN_SESSION')
         sp_connack_bit = 0
     else:
         #implementare pentru clean session 0(daca serverul a stocat sesiunea, sp_connack_bit = 1, altfel 0)
         pass
 
-
     if conn_flags & CONNECTION_FLAGS.WILL_FLAG.value:
-        printLog("CONN_FLAG", 'YUHUHUI, are FLAG de WILL_FLAG')
+        #printLog("CONN_FLAG", 'YUHUHUI, are FLAG de WILL_FLAG')
+        pass
 
     will_qos = ((conn_flags & CONNECTION_FLAGS.WILL_QOS2.value) >> 4) | ((conn_flags & CONNECTION_FLAGS.WILL_QOS1.value) >> 2)
-    printLog("CONN_FLAG", 'YUHUHUI, are FLAG de WILL_QOS: ' + str(will_qos))
+    #printLog("CONN_FLAG", 'YUHUHUI, are FLAG de WILL_QOS: ' + str(will_qos))
 
     if conn_flags & CONNECTION_FLAGS.WILL_RETAIN.value:
-        printLog("CONN_FLAG", 'YUHUHUI, are FLAG de WILL_RETAIN')
+        #printLog("CONN_FLAG", 'YUHUHUI, are FLAG de WILL_RETAIN')
+        pass
 
     if conn_flags & CONNECTION_FLAGS.PASSWORD.value:
-        printLog("CONN_FLAG", 'YUHUHUI, are FLAG de PASSWORD')
+        #printLog("CONN_FLAG", 'YUHUHUI, are FLAG de PASSWORD')
+        pass
 
     if conn_flags & CONNECTION_FLAGS.USER_NAME.value:
-        printLog("CONN_FLAG", 'YUHUHUI, are FLAG de USER_NAME')
+        #printLog("CONN_FLAG", 'YUHUHUI, are FLAG de USER_NAME')
+        pass
 
     # WILL_TOPIC
     will_topic = ''
     will_message = ''
     if conn_flags & CONNECTION_FLAGS.WILL_FLAG.value:
         offset, will_topic = parsePacketString(packet.data, offset)
-        printLog("will_topic", will_topic)
+        #printLog("will_topic", will_topic)
 
         offset, will_message = parsePacketString(packet.data, offset)
-        printLog("will_message", will_message)
+        #printLog("will_message", will_message)
 
     user_name = ''
     if conn_flags & CONNECTION_FLAGS.USER_NAME.value:
         offset, user_name = parsePacketString(packet.data, offset)
-        printLog("user_name", user_name)
+        #printLog("user_name", user_name)
 
     password = ''
     if conn_flags & CONNECTION_FLAGS.PASSWORD.value:
         offset, password = parsePacketString(packet.data, offset)
-        printLog("password: ", password)
+        #printLog("password: ", password)
 
     #TODO aici vin checkuri pentru corectitudinea datelor, ne apucam de connack si vedem dupa care e mersul aici
     return_code = 0
     if protocol_level != 4:
         return_code = 1
 
-
     # daca e totu ca la abecedar trimitem connack-ul
-    to_send_packet = generateCONNACKPacket(packet.conn, packet.addr,sp_connack_bit, return_code) # 0 -> ACCEPTED
+    to_send_packet = generateCONNACKPacket(packet.conn, packet.addr, sp_connack_bit, return_code) # 0 -> ACCEPTED
     server.sendPacket(to_send_packet)
 
     new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name, password)
     server.clients[new_client.addr] = new_client
-    print(server.clients)
+
+    #printLog('END-PACKET -> CONNECT', '--------------------------------------------------------------')
 
 def HandlePUBLISH(server, packet):
     printLog('NEW-PACKET -> PUBLISH', '--------------------------------------------------------------')
@@ -166,8 +166,6 @@ def HandlePINGREQ(server, packet):
 def HandleDISCONNECT(server, packet):
     printLog('NEW-PACKET -> DISCONNECT', '--------------------------------------------------------------')
     printLog('DISCONNECT', 'say byebye to ' + str(packet.addr))
-    printLog('addr[0]', packet.addr[0])
-    printLog('addr[1]', packet.addr[1])
     del server.clients[packet.addr]
 
    # print(server.clients)

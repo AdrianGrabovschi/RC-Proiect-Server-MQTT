@@ -1,9 +1,6 @@
 from __future__ import print_function
-import sys
 import threading
 import time
-import datetime
-#clasa timer in threading
 
 class Clock(threading.Thread):
     def __init__(self, interval, tick):
@@ -18,5 +15,7 @@ class Clock(threading.Thread):
             time.sleep(self.interval)
 
 
-def printLog(msg_type, msg):
+def printLog(msg_type, msg='', newLine=False):
+    if (newLine):
+        print('')
     print("[" + msg_type.upper() + "]\t" + str(msg))

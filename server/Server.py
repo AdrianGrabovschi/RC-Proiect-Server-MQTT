@@ -1,4 +1,7 @@
-from server.PacketHandler import *
+import struct
+
+from Utils import *
+from PacketHandler import *
 import socket
 
 class Server:
@@ -36,8 +39,12 @@ class Server:
         self.sock.close()
 
     def tick(self):
+        pass
+        """
         for clientID in self.clients:
-            printLog('CLOCK', str(clientID) + ':' + str(self.clients[clientID].userName) + ' -> activ de:' + str(time.time()-self.clients[clientID].lastTimeActive))
+            printLog('CLOCK', str(clientID) + ':' + str(self.clients[clientID].userName) +
+                     ' -> activ de: ' + str(round(time.time()-self.clients[clientID].lastTimeActive)) + ' secunde')
+        """
 
     def listen(self):
         self.sock.listen() # fara parametrii -> default, mai bine asa, sa si faca talentul cum stie el mai bine
@@ -51,7 +58,8 @@ class Server:
             data = conn.recv(1024)
             if not data:
                 break
-            printLog('RECV', 'Server recived ' + str(addr) + ': ' + str(data))
+
+            printLog('RECV', 'Server recived ' + str(addr) + ': ' + str(data), True)
 
             # packet_code = struct.unpack('B', data[0:1])[0] >> 4
             # printLog('Packet Code', str(addr) + ' -> ' + str(packet_code))
@@ -73,7 +81,7 @@ class Server:
                 case _:  # default
                     printLog('ERROR', 'Invalid Packet: ' + packet_type.name)
 
-        printLog('INFO', str(addr) + ' disconnected from server')
+        printLog('CONN', str(addr) + ' disconnected from server', True)
         conn.close()
 
     def sendPacket(self, packet):

@@ -1,5 +1,4 @@
 
-
 def getPacketRemainingLength(data):
     multiplier = 1
     value = 0
