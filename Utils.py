@@ -4,18 +4,19 @@ import time
 
 class Clock(threading.Thread):
     def __init__(self, interval, tick):
+        self.running = True
         self.start_timestamp = time.time() # in caz ca trebuie
         self.target_function = tick
         self.interval = interval
         threading.Thread.__init__(self)
 
     def run(self):
-        while True:
+        while self.running:
             self.target_function()
             time.sleep(self.interval)
 
 
 def printLog(msg_type, msg='', newLine=False):
-    if (newLine):
+    if newLine:
         print('')
     print("[" + msg_type.upper() + "]\t" + str(msg))

@@ -4,6 +4,7 @@ from Utils import *
 from PacketHandler import *
 import socket
 
+
 class Server:
     def __init__(self, _HOST, _PORT):
         # network stuff
@@ -12,13 +13,12 @@ class Server:
         self.sock = None
 
         # configs
-        self.running = False # state-ul generic al serverului
+        self.running = False  # state-ul generic al serverului
         self.listenThread = None
         self.clockThread = None
 
         # server side stuff
         self.clients = {}
-
 
     def start(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -31,12 +31,17 @@ class Server:
         self.listenThread = threading.Thread(target=self.listen)
         self.listenThread.start()
 
-        self.clockThread = Clock(1, self.tick) # o data pe secunda tick()
+        self.clockThread = Clock(1, self.tick)  # o data pe secunda tick()
         self.clockThread.start()
 
     def stop(self):
+        printLog('INFO', 'Closing Server...')
         self.running = False
+        self.clockThread.running = False
+
         self.sock.close()
+        self.clockThread.join()
+        self.listenThread.join()
 
     def tick(self):
         pass
@@ -47,15 +52,19 @@ class Server:
         """
 
     def listen(self):
-        self.sock.listen() # fara parametrii -> default, mai bine asa, sa si faca talentul cum stie el mai bine
+        self.sock.listen()  # fara parametrii -> default, mai bine asa, sa si faca talentul cum stie el mai bine
         while self.running:
-            (conn, addr) = self.sock.accept()
-            printLog('CONN', 'Server connected to ' + str(addr))
-            threading.Thread(target=self.handleConnection, args=(conn, addr)).start()
+            try:
+                (conn, addr) = self.sock.accept()
+                printLog('CONN', 'Server connected to ' + str(addr))
+                threading.Thread(target=self.handleConnection, args=(conn, addr)).start()
+            except:
+                pass
 
     def handleConnection(self, conn, addr):
         while self.running:
             data = conn.recv(1024)
+
             if not data:
                 break
 
