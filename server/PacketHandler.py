@@ -1,6 +1,5 @@
 from enum import Enum
 
-from Client import *
 from Server import *
 from Utils  import *
 import struct

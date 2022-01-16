@@ -1,7 +1,4 @@
 
-.idea/inspectionProfiles/profiles_settings.xml
-.idea/inspectionProfiles/Project_Default.xml
-.idea/misc.xml
-.idea/modules.xml
-.idea/repo_proiect_rc.iml
-.idea/vcs.xml
+.idea/
+__pycache__/
+README.md

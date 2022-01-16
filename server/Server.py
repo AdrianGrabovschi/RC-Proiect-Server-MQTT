@@ -1,9 +1,5 @@
+from server.PacketHandler import *
 import socket
-import struct
-import threading
-
-from Utils import *
-from PacketHandler import *
 
 class Server:
     def __init__(self, _HOST, _PORT):
