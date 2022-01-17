@@ -1,5 +1,5 @@
 import struct
-
+import cryptocode
 from Utils import *
 from server.PacketHandler import *
 from collections import deque
@@ -118,6 +118,8 @@ class Server:
         lines = file.read().splitlines()
 
         for usr, pas in zip(*[iter(lines)]*2):
+            usr = cryptocode.decrypt(usr, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
+            pas = cryptocode.decrypt(pas, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
             self.credentials[usr] = pas
 
         file.close()
