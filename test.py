@@ -1,15 +1,7 @@
+import cryptocode
 
-def getPacketRemainingLength(data):
-    multiplier = 1
-    value = 0
-    index = 2
-    while True:
-        byte = data[index]
-        value += (byte & 127) * multiplier
-        if not(byte & 128):
-            break
-        multiplier = multiplier * 128
-        index += 1
-    return index - 1, value
+test = cryptocode.encrypt("pass3", "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
+user = cryptocode.decrypt("s8P5HIE=*uhoaQvYErekMjEhWvMOEWg==*VBYVwc/0UpOSWtE6iVU6bw==*agU+7nIOkh3g2rg8BU280A==", "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
 
-getPacketRemainingLength(b'\x00\xFF\xFF\x77')
+print(test)
+print(user)

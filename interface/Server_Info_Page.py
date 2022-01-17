@@ -14,9 +14,12 @@ class Server_Info(Notebook_Page):
         Button(self.frame, text="Disconect", command=self.disconnect_client).place(x=WINDOW_WIDTH - 150, y=16+100, width=100)
 
         self.dd_user = StringVar(self.frame)
-        self.dd_user.set(list(server.credentials.keys())[0])
+        #self.dd_user.set(list(server.credentials.keys())[0])
+        self.dd_user.set('all')
 
-        drop_down_menu = OptionMenu(self.frame, self.dd_user, *list(server.credentials.keys()), command=self.show_cients)
+        users = ['all', *list(server.credentials.keys())]
+
+        drop_down_menu = OptionMenu(self.frame, self.dd_user, *users, command=self.show_cients)
         drop_down_menu.place(x=WINDOW_WIDTH - 150, y=16, width=100)
 
         self.client_select_label = Label(self.frame, text='Selected client: ', fg='black')
@@ -43,7 +46,7 @@ class Server_Info(Notebook_Page):
         # self.tree.column(columns[0], width=0)
 
         for key, client in server.clients.items():
-            if client.userName == self.dd_user.get():
+            if self.dd_user.get() == 'all' or client.userName == self.dd_user.get():
                 self.tree.insert('', 'end', values=(client.clientID, client.userName))
 
     def select_client(self, arg):

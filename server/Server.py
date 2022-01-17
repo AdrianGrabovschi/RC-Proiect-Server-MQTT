@@ -14,15 +14,15 @@ class Server:
         self.sock = None
 
         # configs
-        self.running = False  # state-ul generic al serverului
-        self.listenThread = None
-        self.clockThread = None
+        self.running = False        # state-ul generic al serverului
+        self.listenThread = None    # thread pentru ascultat conexiuni
+        self.clockThread = None     # thread pentru timer
 
         # server side stuff
-        self.clients = {}
-        self.topics = {}
-        self.match_client_conn = {}
-        self.credentials = {}
+        self.topics = {}            # {topic_name, coada de string-uri pentru ultimele 10 valori}
+        self.clients = {}           # {client_id, Client}
+        self.credentials = {}       # {user, pass}
+        self.match_client_conn = {} # {conn, client_id}
 
         self.read_users_and_passwords()
         self.read_topics()
@@ -120,6 +120,7 @@ class Server:
         for usr, pas in zip(*[iter(lines)]*2):
             usr = cryptocode.decrypt(usr, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
             pas = cryptocode.decrypt(pas, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
+            print(usr, pas)
             self.credentials[usr] = pas
 
         file.close()
