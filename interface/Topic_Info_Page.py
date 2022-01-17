@@ -1,5 +1,5 @@
-from Notebook_Page import *
-from Interface_Utils import *
+from interface.Notebook_Page import *
+from interface.Interface_Utils import *
 from tkinter import *
 
 class Topic_Info(Notebook_Page):

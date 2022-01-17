@@ -1,8 +1,8 @@
 import struct
 from enum import Enum
-from Server import *
 from Utils import *
-from Client import *
+from server.Server import *
+from server.Client import *
 
 class Packet:
     def __init__(self, _conn, _addr, _packet_type, _data=None):
@@ -37,6 +37,14 @@ class CONNECTION_FLAGS(Enum):
     WILL_RETAIN   = (1 << 5)
     PASSWORD      = (1 << 6)
     USER_NAME     = (1 << 7)
+
+class CONNACK_RETURN_CODES(Enum):
+    ACCEPTED                        = 0
+    UNACCEPTABLE_PROTOCOL_VERSION   = 1
+    IDENTIFIER_REJECTED             = 2
+    SERVER_UNAVAILABLE              = 3
+    BAD_CREDENTIALS                 = 4
+    NOT_AUTHORIZED                  = 5
 
 
 # cc: https://docs.solace.com/MQTT-311-Prtl-Conformance-Spec/MQTT%20Control%20Packet%20format.htm#_Ref355703004
@@ -91,6 +99,7 @@ def HandleCONNECT(server, packet):
     offset += 4
 
     offset, client_id = parsePacketString(packet.data, offset)
+    client_id = client_id.decode('ascii')
 
     if conn_flags & CONNECTION_FLAGS.CLEAN_SESSION.value:
         #printLog("CONN_FLAG", 'YUHUHUI, are FLAG de CLEAN_SESSION')
@@ -131,24 +140,34 @@ def HandleCONNECT(server, packet):
     user_name = ''
     if conn_flags & CONNECTION_FLAGS.USER_NAME.value:
         offset, user_name = parsePacketString(packet.data, offset)
+        user_name = user_name.decode('ascii')
         #printLog("user_name", user_name)
 
     password = ''
     if conn_flags & CONNECTION_FLAGS.PASSWORD.value:
         offset, password = parsePacketString(packet.data, offset)
+        password = password.decode('ascii')
         #printLog("password: ", password)
 
     #TODO aici vin checkuri pentru corectitudinea datelor, ne apucam de connack si vedem dupa care e mersul aici
-    return_code = 0
+    return_code = CONNACK_RETURN_CODES.ACCEPTED.value
     if protocol_level != 4:
-        return_code = 1
+        return_code = CONNACK_RETURN_CODES.UNACCEPTABLE_PROTOCOL_VERSION.value
+
+    if not ((user_name in server.credentials) and (server.credentials[user_name] == password)):
+        return_code = CONNACK_RETURN_CODES.BAD_CREDENTIALS.value
+
+    if client_id in server.clients:
+        return_code = CONNACK_RETURN_CODES.IDENTIFIER_REJECTED.value
 
     # daca e totu ca la abecedar trimitem connack-ul
     to_send_packet = generateCONNACKPacket(packet.conn, packet.addr, sp_connack_bit, return_code) # 0 -> ACCEPTED
     server.sendPacket(to_send_packet)
 
-    new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name, password)
-    server.clients[new_client.addr] = new_client
+    if return_code == CONNACK_RETURN_CODES.ACCEPTED.value:
+        new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name)
+        server.clients[client_id] = new_client
+        server.match_client_conn[packet.addr] = client_id
 
     #printLog('END-PACKET -> CONNECT', '--------------------------------------------------------------')
 
@@ -166,7 +185,9 @@ def HandlePINGREQ(server, packet):
 def HandleDISCONNECT(server, packet):
     printLog('NEW-PACKET -> DISCONNECT', '--------------------------------------------------------------')
     printLog('DISCONNECT', 'say byebye to ' + str(packet.addr))
-    del server.clients[packet.addr]
+    client_id = server.match_client_conn[packet.addr]
+    del server.clients[client_id]
+    del server.match_client_conn[packet.addr]
 
    # print(server.clients)
 

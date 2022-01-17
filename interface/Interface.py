@@ -1,14 +1,15 @@
 from tkinter import *
 from tkinter.ttk import Notebook
 
-from Interface_Utils import *
-from Server_Info_Page import Server_Info
-from Topic_Info_Page import Topic_Info
+from interface.Interface_Utils import *
+from interface.Server_Info_Page import Server_Info
+from interface.Topic_Info_Page import Topic_Info
+
+from server.ServerInstance import server
 
 
 class Interface:
-    def __init__(self, server):
-        self.server = server
+    def __init__(self):
 
         self.mainWindow = Tk()
         self.mainWindow.title('MQTT Server')
@@ -29,11 +30,14 @@ class Interface:
         notebook.add(topicInfoPage.frame,   text='Topics Information')
 
     def create(self):
-        self.server.start()
-        self.mainWindow.mainloop()
+        server.start()
+        try:
+            self.mainWindow.mainloop()
+        except:
+            server.stop()
 
     def on_closing(self):
-        self.server.stop()
+        server.stop()
         self.mainWindow.destroy()
 
 

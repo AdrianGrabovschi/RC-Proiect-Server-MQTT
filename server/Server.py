@@ -1,7 +1,7 @@
 import struct
 
 from Utils import *
-from PacketHandler import *
+from server.PacketHandler import *
 import socket
 
 
@@ -19,6 +19,10 @@ class Server:
 
         # server side stuff
         self.clients = {}
+        self.match_client_conn = {}
+        self.credentials = {}
+
+        self.read_users_and_passwords()
 
     def start(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -90,12 +94,23 @@ class Server:
                 case _:  # default
                     printLog('ERROR', 'Invalid Packet: ' + packet_type.name)
 
-        printLog('CONN', str(addr) + ' disconnected from server', True)
+        printLog('CONN', str(addr) + ' disconnected from server')
         conn.close()
 
     def sendPacket(self, packet):
         printLog('SEND', str(packet.addr) + ' -> ' + str(packet.data))
         packet.conn.sendall(packet.data)
+
+    def read_users_and_passwords(self):
+        file_path = CURRENT_PATH + '\\' + USERS_FILE_NAME
+        file = open(file_path, "r")
+        lines = file.read().splitlines()
+
+        for usr, pas in zip(*[iter(lines)]*2):
+            self.credentials[usr] = pas
+
+        file.close()
+
 
     def dummy(self):
         print("dummmyymsdjkfghjksadf")
