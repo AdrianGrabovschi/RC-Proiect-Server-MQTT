@@ -2,6 +2,7 @@ import struct
 
 from Utils import *
 from server.PacketHandler import *
+from collections import deque
 import socket
 
 
@@ -19,17 +20,19 @@ class Server:
 
         # server side stuff
         self.clients = {}
+        self.topics = {}
         self.match_client_conn = {}
         self.credentials = {}
 
         self.read_users_and_passwords()
+        self.read_topics()
 
     def start(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((self.host, self.port))
 
-        printLog('info', 'Server starting on: ' + self.host + ':' + str(self.port))
+        printLog('INFO', 'Server starting on: ' + self.host + ':' + str(self.port))
         self.running = True
 
         self.listenThread = threading.Thread(target=self.listen)
@@ -39,7 +42,7 @@ class Server:
         self.clockThread.start()
 
     def stop(self):
-        printLog('INFO', 'Closing Server...')
+        printLog('INFO', 'Closing Server...', True)
         self.running = False
         self.clockThread.running = False
 
@@ -57,17 +60,23 @@ class Server:
 
     def listen(self):
         self.sock.listen()  # fara parametrii -> default, mai bine asa, sa si faca talentul cum stie el mai bine
+        conn = None
         while self.running:
             try:
                 (conn, addr) = self.sock.accept()
                 printLog('CONN', 'Server connected to ' + str(addr))
                 threading.Thread(target=self.handleConnection, args=(conn, addr)).start()
             except:
+                if conn:
+                    conn.close()
                 pass
 
     def handleConnection(self, conn, addr):
         while self.running:
-            data = conn.recv(1024)
+            try:
+                data = conn.recv(1024)
+            except:
+                pass
 
             if not data:
                 break
@@ -99,8 +108,10 @@ class Server:
 
     def sendPacket(self, packet):
         printLog('SEND', str(packet.addr) + ' -> ' + str(packet.data))
-        packet.conn.sendall(packet.data)
-
+        try:
+            packet.conn.sendall(packet.data)
+        except:
+            pass
     def read_users_and_passwords(self):
         file_path = CURRENT_PATH + '\\' + USERS_FILE_NAME
         file = open(file_path, "r")
@@ -108,6 +119,16 @@ class Server:
 
         for usr, pas in zip(*[iter(lines)]*2):
             self.credentials[usr] = pas
+
+        file.close()
+
+    def read_topics(self):
+        file_path = CURRENT_PATH + '\\' + TOPICS_FILE_NAME
+        file = open(file_path, "r")
+        lines = file.read().splitlines()
+
+        for topic in lines:
+            self.topics[topic] = deque(("aaaaa", "bbbbb", "ccccc"))
 
         file.close()
 

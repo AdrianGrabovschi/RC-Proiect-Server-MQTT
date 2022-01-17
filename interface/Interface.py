@@ -39,6 +39,3 @@ class Interface:
     def on_closing(self):
         server.stop()
         self.mainWindow.destroy()
-
-
-

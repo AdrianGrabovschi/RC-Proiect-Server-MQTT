@@ -4,11 +4,9 @@ import os
 import threading
 import time
 
-SERVER_HOST = 'localhost'
-SERVER_PORT = 7777
-
 CURRENT_PATH = os.getcwd()
 USERS_FILE_NAME = 'secret.txt'
+TOPICS_FILE_NAME = 'topics.txt'
 
 class Clock(threading.Thread):
     def __init__(self, interval, tick):
