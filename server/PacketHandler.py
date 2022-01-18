@@ -3,6 +3,7 @@ from enum import Enum
 from Utils import *
 from server.Server import *
 from server.Client import *
+from collections import deque
 
 class Packet:
     def __init__(self, _conn, _addr, _packet_type, _data=None):
@@ -61,6 +62,7 @@ def getPacketRemainingLength(packet):
         index += 1
     return index + 1, value
 
+
 def parsePacketString(data, offset):
     str_len = struct.unpack('!H', data[offset : offset + 2])[0]
     #printLog('parse-Packet-String - len',  str_len)
@@ -80,10 +82,31 @@ def generateCONNACKPacket(conn, addr, sp_bit, returnCode):
     # 4 -> code return-ul CONNACK-ului
     return packet
 
+def generateSUBACKPacket(conn, addr, packet_id, returnCode):
+    packet = Packet(conn, addr, PACKET_TYPE.SUBACK)
+    packet.data = struct.pack('!BBHB', PACKET_TYPE.SUBACK.value << 4, 3, packet_id, returnCode)
+    return packet
+
 def generatePINGRESPPacket(conn, addr):
     packet = Packet(conn, addr, PACKET_TYPE.PINGRESP)
     packet.data = struct.pack('BB',  PACKET_TYPE.PINGRESP.value << 4, 0)
+    return packet
 
+def generatePUBACKPacket(conn, addr, packet_id):
+    packet = Packet(conn, addr, PACKET_TYPE.PUBACK)
+    packet.data = struct.pack('!BBH',  PACKET_TYPE.PUBACK.value << 4, 2, packet_id)
+    return packet
+
+def generatePUBRECPacket(conn, addr, packet_id):
+    packet = Packet(conn, addr, PACKET_TYPE.PUBREC)
+    packet.data = struct.pack('!BBH',  PACKET_TYPE.PUBREC.value << 4, 2, packet_id)
+    return packet
+
+def generatePUBLISHPacket(conn, addr, dup, qos, retain, msg, packet_id):
+    packet = Packet(conn, addr, PACKET_TYPE.PUBLISH)
+    first_byte = (PACKET_TYPE.PUBLISH.value << 4) | (dup << 3) | (qos << 1) | (retain)
+    var_header_len = 2 + len(msg) + 2
+    packet.data = struct.pack('!BHH%dsH' % len(msg), first_byte, var_header_len, len(msg), msg.encode('utf-8'), packet_id)
     return packet
 
 def HandleCONNECT(server, packet):
@@ -174,13 +197,46 @@ def HandleCONNECT(server, packet):
 def HandlePUBLISH(server, packet):
     printLog('NEW-PACKET -> PUBLISH', '--------------------------------------------------------------')
 
+    first_byte = packet.data[0]
+    dup_flag    = (first_byte & (1 << 3)) >> 3
+    qos         = (first_byte & (3 << 1)) >> 1
+    retain_flag =  first_byte & 1
+
+    (rlOffset, rlLen) = getPacketRemainingLength(packet)
+    offset = rlOffset
+
+    offset, topic_name = parsePacketString(packet.data, offset)
+
+    topic_name = topic_name.decode('ascii')
+
+    packet_id = 0
+    if qos != 0:
+        packet_id = struct.unpack('!H', packet.data[offset: offset + 2])[0]
+        offset += 2
+
+    message = packet.data[offset:].decode('ascii')
+
+    # aici incepe handle ul
+    if not (topic_name in server.topics.keys()):
+        server.topics[topic_name] = deque()
+
+    if   qos == 0:
+        for key, value in server.clients.items():
+            if (topic_name in value.topics[0]):
+                server.sendPacket(packet)
+    elif qos == 1:
+        to_send_packet = generatePUBACKPacket(packet.conn, packet.addr, packet_id)
+        server.sendPacket(to_send_packet)
+    elif qos == 2:
+        to_send_packet = generatePUBRECPacket(packet.conn, packet.addr, packet_id)
+        server.sendPacket(to_send_packet)
+    else:
+        packet.conn.close()
 
 def HandlePINGREQ(server, packet):
     printLog('NEW-PACKET -> PINGREQ', '--------------------------------------------------------------')
     to_send_packet = generatePINGRESPPacket(packet.conn, packet.addr)
-
     server.sendPacket(to_send_packet)
-
 
 def HandleDISCONNECT(server, packet):
     printLog('NEW-PACKET -> DISCONNECT', '--------------------------------------------------------------')
@@ -189,5 +245,34 @@ def HandleDISCONNECT(server, packet):
     del server.clients[client_id]
     del server.match_client_conn[packet.addr]
 
-   # print(server.clients)
+def HandleSUBSCRIBE(server, packet):
+    printLog('NEW-PACKET -> SUBSCRIBE', '--------------------------------------------------------------')
+
+    offset = 0
+    while offset < len(packet.data):
+        packet.data = packet.data[offset:]
+        (rlOffset, rlLen) = getPacketRemainingLength(packet)
+        offset = rlOffset
+
+        packet_identifier = struct.unpack('!H', packet.data[offset : offset + 2])[0]
+        offset += 2
+
+        client_id = server.match_client_conn[packet.addr]
+
+        topic_count = 0
+        topic_count = topic_count + 1
+
+        offset, topic_name = parsePacketString(packet.data, offset)
+        qos = struct.unpack('!B', packet.data[offset: offset + 1])[0]
+        offset += 1
+
+        topic_name = topic_name.decode('ascii')
+        server.clients[client_id].topics.append((topic_name, qos))
+
+        if not (topic_name in server.topics.keys()):
+            server.topics[topic_name] = deque()
+
+        to_send_packet = generateSUBACKPacket(packet.conn, packet.addr, packet_identifier, qos)
+        server.sendPacket(to_send_packet)
+
 

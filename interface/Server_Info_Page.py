@@ -28,10 +28,11 @@ class Server_Info(Notebook_Page):
         self.to_be_disconnected = None
 
         self.tree = None
+        self.client_tree = None
         self.show_cients()
 
     def show_cients(self, arg=''):
-        columns = ['Client_ID', 'User']
+        columns = ['Client_ID', 'User', 'IP', 'PORT']
 
         if self.tree:
             self.tree.destroy()
@@ -47,7 +48,7 @@ class Server_Info(Notebook_Page):
 
         for key, client in server.clients.items():
             if self.dd_user.get() == 'all' or client.userName == self.dd_user.get():
-                self.tree.insert('', 'end', values=(client.clientID, client.userName))
+                self.tree.insert('', 'end', values=(client.clientID, client.userName, *client.addr))
 
     def select_client(self, arg):
         self.selected_client = self.tree.focus()
@@ -61,6 +62,23 @@ class Server_Info(Notebook_Page):
 
         self.client_select_label['text'] = "Selected client: " + str(client)
         self.to_be_disconnected = client[0]
+
+        columns = ['Topic', 'QoS']
+
+        if self.client_tree:
+            self.client_tree.destroy()
+
+        self.client_tree = Treeview(self.frame, columns=columns, show='headings', height=8)
+        self.client_tree.place(x=16, y=WINDOW_HEIGHT / 2 + 32, anchor=NW)
+        # self.client_tree.bind('<ButtonRelease-1>', self.ceva)
+
+        for column in columns:
+            self.client_tree.heading(column, text=column)
+            self.client_tree.column(column, minwidth=0, width=(int)((WINDOW_WIDTH * 0.75) / len(columns)), stretch=NO)
+        # self.tree.column(columns[0], width=0)
+
+        for topic in server.clients[client[0]].topics:
+            self.client_tree.insert('', 'end', values=topic)
 
     def disconnect_client(self):
         #TODO disconnect handle

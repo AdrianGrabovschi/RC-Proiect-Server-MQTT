@@ -42,13 +42,16 @@ class Server:
         self.clockThread.start()
 
     def stop(self):
-        printLog('INFO', 'Closing Server...', True)
         self.running = False
         self.clockThread.running = False
+
+        for key, value in self.clients.items():
+            value.conn.close()
 
         self.sock.close()
         self.clockThread.join()
         self.listenThread.join()
+        printLog('INFO', 'Closing Server...', True)
 
     def tick(self):
         pass
@@ -100,6 +103,8 @@ class Server:
                     HandlePINGREQ(self, currentPacket)
                 case PACKET_TYPE.DISCONNECT:
                     HandleDISCONNECT(self, currentPacket)
+                case PACKET_TYPE.SUBSCRIBE:
+                    HandleSUBSCRIBE(self, currentPacket)
                 case _:  # default
                     printLog('ERROR', 'Invalid Packet: ' + packet_type.name)
 
@@ -120,7 +125,6 @@ class Server:
         for usr, pas in zip(*[iter(lines)]*2):
             usr = cryptocode.decrypt(usr, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
             pas = cryptocode.decrypt(pas, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
-            print(usr, pas)
             self.credentials[usr] = pas
 
         file.close()
