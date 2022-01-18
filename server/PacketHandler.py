@@ -62,6 +62,18 @@ def getPacketRemainingLength(packet):
         index += 1
     return index + 1, value
 
+def encodePacketRemainingLength(X):
+    ret = []
+    while True:
+        encodedByte = X % 128
+        ret.append(encodedByte)
+
+        X = X // 128
+        if X > 0:
+            encodedByte = encodedByte | 128
+        else:
+            break
+    return ret
 
 def parsePacketString(data, offset):
     str_len = struct.unpack('!H', data[offset : offset + 2])[0]
@@ -102,15 +114,39 @@ def generatePUBRECPacket(conn, addr, packet_id):
     packet.data = struct.pack('!BBH',  PACKET_TYPE.PUBREC.value << 4, 2, packet_id)
     return packet
 
-def generatePUBLISHPacket(conn, addr, dup, qos, retain, msg, packet_id):
+def generatePUBLISHPacket(conn, addr, dup, qos, retain, topic, message, packet_id=0):
     packet = Packet(conn, addr, PACKET_TYPE.PUBLISH)
-    first_byte = (PACKET_TYPE.PUBLISH.value << 4) | (dup << 3) | (qos << 1) | (retain)
-    var_header_len = 2 + len(msg) + 2
-    packet.data = struct.pack('!BHH%dsH' % len(msg), first_byte, var_header_len, len(msg), msg.encode('utf-8'), packet_id)
+
+    first_byte = (PACKET_TYPE.PUBLISH.value << 4) | (dup << 3) | (qos << 1) | retain
+    packet.data = struct.pack('B', first_byte)
+
+    rem_len = 2 + len(topic) + len(message)
+    if qos != 0:
+        rem_len += 2
+
+    for byte in encodePacketRemainingLength(rem_len):
+        packet.data += struct.pack('B', byte)
+
+    packet.data += struct.pack('!H%ds' % len(topic), len(topic), topic.encode('utf-8'))
+    if qos != 0:
+        packet.data += struct.pack('!H', packet_id)
+
+    packet.data += struct.pack('%ds' % len(message), message.encode('utf-8'))
+
+    return packet
+
+def generatePUBRELPacket(conn, addr, packet_id):
+    packet = Packet(conn, addr, PACKET_TYPE.PUBREL)
+    packet.data = struct.pack('!BBH', (PACKET_TYPE.PUBREL.value << 4) | 2, 2, packet_id)
+    return packet
+
+def generatePUBCOMPPacket(conn, addr, packet_id):
+    packet = Packet(conn, addr, PACKET_TYPE.PUBCOMP)
+    packet.data = struct.pack('!BBH', PACKET_TYPE.PUBCOMP.value << 4, 2, packet_id)
     return packet
 
 def HandleCONNECT(server, packet):
-    printLog('NEW-PACKET -> CONNECT', '--------------------------------------------------------------')
+    printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------') 
 
     # primii doi bytes irelevanti
     (rlOffset, rlLen) = getPacketRemainingLength(packet)
@@ -194,13 +230,38 @@ def HandleCONNECT(server, packet):
 
     #printLog('END-PACKET -> CONNECT', '--------------------------------------------------------------')
 
+def Send_PUBLISH_to_clients(server, conn, addr, dup_flag, retain_flag, topic_name, message):
+    for key, value in server.clients.items():
+        OK = False
+        topic_qos = None
+        for topic in value.topics:
+            if topic_name == topic[0]:
+                OK = True
+                topic_qos = topic[1]
+        if not OK:
+            return
+
+        if topic_qos == 0:
+            new_packet = generatePUBLISHPacket(conn, addr, dup_flag, topic_qos, retain_flag, topic_name, message)
+        elif topic_qos == 1:
+            new_packet = generatePUBLISHPacket(conn, addr, dup_flag, topic_qos, retain_flag, topic_name, message, server.nex_packet_id())
+            # TODO stocheaza si trimite iar daca nu vine PUBACK
+        elif topic_qos == 2:
+            pass
+        else:
+            conn.close()
+            return
+
+        server.sendPacket(new_packet)
+
+
 def HandlePUBLISH(server, packet):
-    printLog('NEW-PACKET -> PUBLISH', '--------------------------------------------------------------')
+    printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
 
     first_byte = packet.data[0]
     dup_flag    = (first_byte & (1 << 3)) >> 3
     qos         = (first_byte & (3 << 1)) >> 1
-    retain_flag =  first_byte & 1
+    retain_flag = (first_byte & 1)
 
     (rlOffset, rlLen) = getPacketRemainingLength(packet)
     offset = rlOffset
@@ -220,33 +281,48 @@ def HandlePUBLISH(server, packet):
     if not (topic_name in server.topics.keys()):
         server.topics[topic_name] = deque()
 
-    if   qos == 0:
-        for key, value in server.clients.items():
-            if (topic_name in value.topics[0]):
-                server.sendPacket(packet)
+    if qos == 0:
+        pass
     elif qos == 1:
-        to_send_packet = generatePUBACKPacket(packet.conn, packet.addr, packet_id)
-        server.sendPacket(to_send_packet)
+        puback_packet = generatePUBACKPacket(packet.conn, packet.addr, packet_id)
+        server.sendPacket(puback_packet)
     elif qos == 2:
         to_send_packet = generatePUBRECPacket(packet.conn, packet.addr, packet_id)
         server.sendPacket(to_send_packet)
     else:
         packet.conn.close()
+        return
+
+    Send_PUBLISH_to_clients(server, packet.conn, packet.addr, 0, 0, topic_name, message)
+
+def HandlePUBREL(server, packet):
+    printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
+
+    (rlOffset, rlLen) = getPacketRemainingLength(packet)
+    offset = rlOffset
+    packet_id = struct.unpack('!H', packet.data[offset: offset + 2])[0]
+
+    to_send_packet = generatePUBCOMPPacket(packet.conn, packet.addr, packet_id)
+    server.sendPacket(to_send_packet)
+
+def HandlePUBACK(server, packet):
+    printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
+    # TODO daca nu vine PUBACK trebuie implementat un handler care trimite iar PUBLISH ul ala dupa un interval
 
 def HandlePINGREQ(server, packet):
-    printLog('NEW-PACKET -> PINGREQ', '--------------------------------------------------------------')
+    printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
     to_send_packet = generatePINGRESPPacket(packet.conn, packet.addr)
     server.sendPacket(to_send_packet)
 
 def HandleDISCONNECT(server, packet):
-    printLog('NEW-PACKET -> DISCONNECT', '--------------------------------------------------------------')
+    printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
     printLog('DISCONNECT', 'say byebye to ' + str(packet.addr))
     client_id = server.match_client_conn[packet.addr]
     del server.clients[client_id]
     del server.match_client_conn[packet.addr]
 
 def HandleSUBSCRIBE(server, packet):
-    printLog('NEW-PACKET -> SUBSCRIBE', '--------------------------------------------------------------')
+    printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
 
     offset = 0
     while offset < len(packet.data):

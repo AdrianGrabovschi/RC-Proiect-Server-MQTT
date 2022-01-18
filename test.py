@@ -1,7 +1,16 @@
-import cryptocode
+def encodePacketRemainingLength(X):
+    ret = []
+    while True:
+        encodedByte = X % 128
+        ret.append(encodedByte)
+        X  = X // 128
+        if X > 0:
+            encodedByte = encodedByte | 128
+        else:
+            break
+    return ret
 
-test = cryptocode.encrypt("pass3", "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
-user = cryptocode.decrypt("s8P5HIE=*uhoaQvYErekMjEhWvMOEWg==*VBYVwc/0UpOSWtE6iVU6bw==*agU+7nIOkh3g2rg8BU280A==", "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
+ret = encodePacketRemainingLength(13)
+print (ret)
 
-print(test)
-print(user)
+print ('H%dsH%ds' % (len('asd'), len('dsa')))

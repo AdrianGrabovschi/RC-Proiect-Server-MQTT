@@ -27,6 +27,8 @@ class Server:
         self.read_users_and_passwords()
         self.read_topics()
 
+        self.packet_id = 7777
+
     def start(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -105,6 +107,11 @@ class Server:
                     HandleDISCONNECT(self, currentPacket)
                 case PACKET_TYPE.SUBSCRIBE:
                     HandleSUBSCRIBE(self, currentPacket)
+                case PACKET_TYPE.PUBACK:
+                    HandlePUBACK(self, currentPacket)
+                case PACKET_TYPE.PUBREL:
+                    HandlePUBREL(self, currentPacket)
+
                 case _:  # default
                     printLog('ERROR', 'Invalid Packet: ' + packet_type.name)
 
@@ -112,7 +119,7 @@ class Server:
         conn.close()
 
     def sendPacket(self, packet):
-        printLog('SEND', str(packet.addr) + ' -> ' + str(packet.data))
+        printLog('SEND-PACKET   -> ' + packet.packet_type.name, str(packet.addr) + ' -> ' + str(packet.data))
         try:
             packet.conn.sendall(packet.data)
         except:
@@ -139,6 +146,11 @@ class Server:
 
         file.close()
 
+    def nex_packet_id(self):
+        if (self.packet_id == (1 << 16)):
+            self.packet_id = 7777 # hazul lui
+        self.packet_id += 1
+        return (self.packet_id)
 
     def dummy(self):
         print("dummmyymsdjkfghjksadf")
