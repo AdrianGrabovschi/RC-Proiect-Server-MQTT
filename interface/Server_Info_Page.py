@@ -86,14 +86,5 @@ class Server_Info(Notebook_Page):
             self.client_tree.insert('', 'end', values=topic)
 
     def disconnect_client(self):
-        #TODO disconnect handle
-        printLog('DISCONNECT', self.to_be_disconnected)
-        client_id = self.to_be_disconnected
-
-        server.clients[client_id].conn.shutdown(socket.SHUT_RD)
-        server.clients[client_id].conn.close()
-        # packet = generateDISCONNECTPacket(server.clients[client_id].conn, server.clients[client_id].addr)
-        # server.sendPacket(packet)
-
-        del server.match_client_conn[server.clients[client_id].addr]
-        del server.clients[client_id]
+        if self.to_be_disconnected:
+            server.disconnect_client(self.to_be_disconnected)

@@ -3,6 +3,7 @@ import threading
 import time
 
 MAX_LAST_TOPIC_ENTRIES = 10
+DISCONNECT_TIMEOUT = 10
 
 CURRENT_PATH = os.getcwd()
 USERS_FILE_NAME = 'secret.txt'

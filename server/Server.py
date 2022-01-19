@@ -21,9 +21,12 @@ class Server:
 
         # server side stuff
         self.topics = {}  # {topic_name, coada de string-uri pentru ultimele 10 valori}
+        self.topics_retain_msg = {} #{topic_name, topic_msg}
         self.clients = {}  # {client_id, Client}
         self.credentials = {}  # {user, pass}
         self.match_client_conn = {}  # {conn, client_id}
+
+        self.timeout_clients = []
 
         self.read_users_and_passwords()
         self.read_topics()
@@ -49,24 +52,39 @@ class Server:
         self.clockThread.running = False
 
         for key, value in self.clients.items():
-            value.conn.shutdown(socket.SHUT_RD)
+            value.conn.shutdown(socket.SHUT_RDWR)
             value.conn.close()
+
+        self.sock.close()
 
         for thread in self.connectionThreads:
             thread.join()
 
-        self.sock.close()
         self.clockThread.join()
         self.listenThread.join()
         printLog('INFO', 'Closing Server...', True)
 
     def tick(self):
-        pass
-        """
-        for clientID in self.clients:
-            printLog('CLOCK', str(clientID) + ':' + str(self.clients[clientID].userName) +
-                     ' -> activ de: ' + str(round(time.time()-self.clients[clientID].lastTimeActive)) + ' secunde')
-        """
+
+        self.timeout_clients = list(filter(lambda entry: not ((time.time() - entry[1]) > DISCONNECT_TIMEOUT), self.timeout_clients))
+
+        to_be_disconnected = []
+        for client_id, client in self.clients.items():
+            if (time.time() - client.lastTimeActive) > (client.keepAliveInterval * 1.5):
+                to_be_disconnected.append(client_id)
+
+        for x in to_be_disconnected:
+            self.disconnect_client(x)
+
+    def disconnect_client(self, client_id):
+        self.timeout_clients.append((client_id, time.time()))
+        self.clients[client_id].conn.shutdown(socket.SHUT_RDWR)
+        self.clients[client_id].conn.close()
+
+        del self.match_client_conn[self.clients[client_id].addr]
+        del self.clients[client_id]
+
+        printLog('FORCE-DISCONNECT', client_id)
 
     def listen(self):
         self.sock.listen()  # fara parametrii -> default, mai bine asa, sa si faca talentul cum stie el mai bine
@@ -81,14 +99,15 @@ class Server:
             except:
                 if conn:
                     conn.close()
-                pass
+                return
 
     def handleConnection(self, conn, addr):
         while self.running:
             try:
                 data = conn.recv(1024)
             except:
-                break
+                printLog('CONN', str(addr) + ' disconnected from server')
+                return
 
             if not data:
                 break
