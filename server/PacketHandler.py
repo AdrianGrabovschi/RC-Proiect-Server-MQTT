@@ -67,7 +67,7 @@ def getPacketRemainingLength(packet):
         index += 1
     return index + 1, value
 
-
+# genereaza bytes de remaining length pentru headerul packetului
 def encodePacketRemainingLength(X):
     ret = []
     while True:
@@ -81,7 +81,7 @@ def encodePacketRemainingLength(X):
             break
     return ret
 
-
+# functie de parsare a unui string din packet pentru a lubrifia parsarea
 def parsePacketString(data, offset):
     str_len = struct.unpack('!H', data[offset: offset + 2])[0]
     # printLog('parse-Packet-String - len',  str_len)
@@ -91,6 +91,7 @@ def parsePacketString(data, offset):
 
     return offset + str_len + 2, string
 
+#               FUNCTII DE GENERARE PACKETE
 
 def generateCONNACKPacket(conn, addr, sp_bit, returnCode):
     packet = Packet(conn, addr, PACKET_TYPE.CONNACK)
@@ -166,6 +167,7 @@ def generatePUBCOMPPacket(conn, addr, packet_id):
     packet.data = struct.pack('!BBH', PACKET_TYPE.PUBCOMP.value << 4, 2, packet_id)
     return packet
 
+#               FUNCTII DE HANDLE PENTRU PUBLISH
 
 def Send_PUBLISH_to_one_client(server, conn, addr, dup_flag, retain_flag, topic_name, qos, message):
     if qos == 0:
@@ -197,6 +199,8 @@ def Send_PUBLISH_to_clients(server, dup_flag, retain_flag, topic_name, message):
 
         Send_PUBLISH_to_one_client(server, value.conn, value.addr, dup_flag, retain_flag, topic_name, topic_qos, message)
 
+
+#               FUNCTII DE HANDLE PACKETS
 
 def HandleCONNECT(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '---------------------------------------------------------')
@@ -262,14 +266,15 @@ def HandleCONNECT(server, packet):
         password = password.decode('ascii')
         # printLog("password: ", password)
 
-    # TODO aici vin checkuri pentru corectitudinea datelor, ne apucam de connack si vedem dupa care e mersul aici
     return_code = CONNACK_RETURN_CODES.ACCEPTED.value
 
+    # verifica sa nu fie pe blacklist
     for exil in server.timeout_clients:
         if client_id in exil:
-            return_code = CONNACK_RETURN_CODES.IDENTIFIER_REJECTED.value
+            return_code = CONNACK_RETURN_CODES.NOT_AUTHORIZED.value
             break
 
+    # check-uri pentru date
     if protocol_level != 4:
         return_code = CONNACK_RETURN_CODES.UNACCEPTABLE_PROTOCOL_VERSION.value
 
@@ -279,16 +284,14 @@ def HandleCONNECT(server, packet):
     if client_id in server.clients:
         return_code = CONNACK_RETURN_CODES.IDENTIFIER_REJECTED.value
 
-    # daca e totu ca la abecedar trimitem connack-ul
     to_send_packet = generateCONNACKPacket(packet.conn, packet.addr, sp_connack_bit, return_code)  # 0 -> ACCEPTED
     server.sendPacket(to_send_packet)
 
+    # daca e totul ca la abecedar activam sesiunea
     if return_code == CONNACK_RETURN_CODES.ACCEPTED.value:
         new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name)
         server.clients[client_id] = new_client
         server.match_client_conn[packet.addr] = client_id
-
-    # printLog('END-PACKET -> CONNECT', '-------------------------------------------------------------')
 
 
 def HandlePUBLISH(server, packet):
@@ -314,9 +317,14 @@ def HandlePUBLISH(server, packet):
     message = packet.data[offset:].decode('ascii')
 
     # aici incepe handle ul
+
+    # retine mesajul daca packetul are flagul de retain activat
     if retain_flag:
         server.topics_retain_msg[topic_name] = message
+    elif topic_name in server.topics_retain_msg:
+        del server.topics_retain_msg[topic_name]
 
+    # actualizeaza mesajul topicului pe care s-a facut publish
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     client_id = server.match_client_conn[packet.addr]
     entry = (message, client_id, packet.addr[0], packet.addr[1], qos, (retain_flag == 1), timestamp)
@@ -327,6 +335,7 @@ def HandlePUBLISH(server, packet):
         if len(server.topics[topic_name]) > MAX_LAST_TOPIC_ENTRIES:
             server.topics[topic_name].popleft()
 
+    # gestioneaza raspunsul in functie de QoS ul primit
     if qos == 0:
         pass
     elif qos == 1:
@@ -339,6 +348,8 @@ def HandlePUBLISH(server, packet):
         packet.conn.close()
         return
 
+    # foloseste functia aia smechera generica facuta din lenea de a face alta functie pentru publish la subscribe
+    # trimite la toti clientii noul mesaj actualizat in topic
     Send_PUBLISH_to_clients(server, 0, 0, topic_name, message)
 
 
@@ -376,9 +387,6 @@ def HandlePUBACK(server, packet):
 def HandlePINGREQ(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '---------------------------------------------------------')
 
-    # update lastTimeActive pentru KeepAlive
-    server.clients[server.match_client_conn[packet.addr]].lastTimeActive = time.time()
-
     to_send_packet = generatePINGRESPPacket(packet.conn, packet.addr)
     server.sendPacket(to_send_packet)
 
@@ -386,14 +394,16 @@ def HandlePINGREQ(server, packet):
 def HandleDISCONNECT(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '---------------------------------------------------------')
     printLog('DISCONNECT', 'say byebye to ' + str(packet.addr))
-    client_id = server.match_client_conn[packet.addr]
-    del server.clients[client_id]
-    del server.match_client_conn[packet.addr]
 
+    client_id = server.match_client_conn[packet.addr]
+
+    del server.match_client_conn[server.clients[client_id].addr]
+    del server.clients[client_id]
 
 def HandleSUBSCRIBE(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '---------------------------------------------------------')
 
+    # parseaza si gestioneaza pe rand toate subscribe-urile care vin in packet
     offset = 0
     while offset < len(packet.data):
         packet.data = packet.data[offset:]
@@ -432,7 +442,8 @@ def HandleSUBSCRIBE(server, packet):
         if not (topic_name in server.topics.keys()):
             server.topics[topic_name] = deque()
 
-        if server.topics_retain_msg:
+        # daca face subscribe pe un topic care are mesaj pe retain, trimite publish
+        if topic_name in server.topics_retain_msg:
             message = server.topics_retain_msg[topic_name]
             Send_PUBLISH_to_one_client(server, packet.conn, packet.addr, 0, 1, topic_name, qos, message)
 

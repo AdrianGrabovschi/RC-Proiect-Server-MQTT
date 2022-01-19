@@ -26,7 +26,7 @@ class Server:
         self.credentials = {}  # {user, pass}
         self.match_client_conn = {}  # {conn, client_id}
 
-        self.timeout_clients = []
+        self.timeout_clients = [] # array pentru gestionat timeout-ul clientilor pana la o a doua conectares
 
         self.read_users_and_passwords()
         self.read_topics()
@@ -41,9 +41,11 @@ class Server:
         printLog('INFO', 'Server starting on: ' + self.host + ':' + str(self.port))
         self.running = True
 
+        # creaza si porneste thread-ul de listen
         self.listenThread = threading.Thread(target=self.listen)
         self.listenThread.start()
 
+        # creaza si porneste thread-ul ceasului intern
         self.clockThread = Clock(1, self.tick)  # o data pe secunda tick()
         self.clockThread.start()
 
@@ -51,48 +53,64 @@ class Server:
         self.running = False
         self.clockThread.running = False
 
+        # opreste conextiunea cu toti clientii conectati
         for key, value in self.clients.items():
             value.conn.shutdown(socket.SHUT_RDWR)
             value.conn.close()
 
+        # opreste socket ul de listen
         self.sock.close()
 
+        # asteapta sa se inchida corect toate thread-urile de handle cu clientii
         for thread in self.connectionThreads:
             thread.join()
 
+        # asteapta sa se inchida corecte thread-urile auxiliare
         self.clockThread.join()
         self.listenThread.join()
         printLog('INFO', 'Closing Server...', True)
 
     def tick(self):
 
+        # actualizeaza black list-ul de timeout a clientilor
         self.timeout_clients = list(filter(lambda entry: not ((time.time() - entry[1]) > DISCONNECT_TIMEOUT), self.timeout_clients))
 
+        # selecteaza clientii care trebuiesc deconectati in urma evaluarii sistemului de keep alive
         to_be_disconnected = []
         for client_id, client in self.clients.items():
+            # printLog(client_id, time.time() - client.lastTimeActive)
             if (time.time() - client.lastTimeActive) > (client.keepAliveInterval * 1.5):
                 to_be_disconnected.append(client_id)
 
+        # deconecteaza clientii selectati
         for x in to_be_disconnected:
             self.disconnect_client(x)
 
     def disconnect_client(self, client_id):
+        printLog('FORCE-DISCONNECT', client_id + ' ' + str(self.clients[client_id].addr))
+
+        # adauga pe black list clientul pentru a evita reconectarea imediata
         self.timeout_clients.append((client_id, time.time()))
+
+        # inchide socketul de comunicare cu respectivul client
         self.clients[client_id].conn.shutdown(socket.SHUT_RDWR)
         self.clients[client_id].conn.close()
 
+        # sterge sesiunea curenta a clientului respectiv
         del self.match_client_conn[self.clients[client_id].addr]
         del self.clients[client_id]
 
-        printLog('FORCE-DISCONNECT', client_id)
 
     def listen(self):
         self.sock.listen()  # fara parametrii -> default, mai bine asa, sa si faca talentul cum stie el mai bine
         conn = None
         while self.running:
             try:
-                (conn, addr) = self.sock.accept()
+                (conn, addr) = self.sock.accept()   # asteapta conexiuni
+
                 printLog('CONN', 'Server connected to ' + str(addr))
+
+                # creaza si porneste thread pentru handle conexiune
                 thread = threading.Thread(target=self.handleConnection, args=(conn, addr))
                 self.connectionThreads.append(thread)
                 thread.start()
@@ -114,14 +132,19 @@ class Server:
 
             printLog('RECV', 'Server recived ' + str(addr) + ': ' + str(data), True)
 
-            # packet_code = struct.unpack('B', data[0:1])[0] >> 4
-            # printLog('Packet Code', str(addr) + ' -> ' + str(packet_code))
+            # extrage tipul packetului din header
             packet_type = PACKET_TYPE(struct.unpack('B', data[0:1])[0] >> 4)
             printLog('Packet Type', str(addr) + ' -> ' + packet_type.name)
 
+            # update lastTimeActive pentru KeepAlive
+            if packet_type != PACKET_TYPE.CONNECT:
+                client_id = self.match_client_conn[addr]
+                self.clients[client_id].lastTimeActive = time.time()
+
+            # handle efectiv al pachetului
             currentPacket = Packet(conn, addr, packet_type, data)
 
-            # update la client.lastTimeActive, cu un map de socket -> client ceva, vedem, detalii de implementare
+            # <3 update la client.lastTimeActive, cu un map de socket -> client ceva, vedem, detalii de implementare <3
             match packet_type:
                 case PACKET_TYPE.CONNECT:
                     HandleCONNECT(self, currentPacket)
@@ -160,6 +183,7 @@ class Server:
         file = open(file_path, "r")
         lines = file.read().splitlines()
 
+        # decripteaza credentialele din fisier cu o cheie simetrica prestabilita
         for usr, pas in zip(*[iter(lines)] * 2):
             usr = cryptocode.decrypt(usr, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
             pas = cryptocode.decrypt(pas, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
@@ -177,7 +201,7 @@ class Server:
 
         file.close()
 
-    def nex_packet_id(self):
+    def nex_packet_id(self):  # genereaza un packet id nou si unic
         if (self.packet_id == (1 << 16)):
             self.packet_id = 7777  # hazul lui
         self.packet_id += 1
