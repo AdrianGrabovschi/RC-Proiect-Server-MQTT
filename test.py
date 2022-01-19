@@ -1,16 +1,8 @@
-def encodePacketRemainingLength(X):
-    ret = []
-    while True:
-        encodedByte = X % 128
-        ret.append(encodedByte)
-        X  = X // 128
-        if X > 0:
-            encodedByte = encodedByte | 128
-        else:
-            break
-    return ret
+import os
 
-ret = encodePacketRemainingLength(13)
-print (ret)
+LOG_FILE_NAME = 'server.log'
 
-print ('H%dsH%ds' % (len('asd'), len('dsa')))
+if os.path.exists(LOG_FILE_NAME):
+    os.remove(LOG_FILE_NAME)
+
+log_file = open(LOG_FILE_NAME, 'w')

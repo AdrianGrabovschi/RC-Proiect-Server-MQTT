@@ -1,4 +1,5 @@
 import struct
+from datetime import datetime
 from enum import Enum
 from Utils import *
 from server.Server import *
@@ -114,6 +115,11 @@ def generatePUBRECPacket(conn, addr, packet_id):
     packet.data = struct.pack('!BBH',  PACKET_TYPE.PUBREC.value << 4, 2, packet_id)
     return packet
 
+def generateDISCONNECTPacket(conn, addr):
+    packet = Packet(conn, addr, PACKET_TYPE.DISCONNECT)
+    packet.data = struct.pack('BB',  PACKET_TYPE.DISCONNECT.value << 4, 0)
+    return packet
+
 def generatePUBLISHPacket(conn, addr, dup, qos, retain, topic, message, packet_id=0):
     packet = Packet(conn, addr, PACKET_TYPE.PUBLISH)
 
@@ -144,6 +150,36 @@ def generatePUBCOMPPacket(conn, addr, packet_id):
     packet = Packet(conn, addr, PACKET_TYPE.PUBCOMP)
     packet.data = struct.pack('!BBH', PACKET_TYPE.PUBCOMP.value << 4, 2, packet_id)
     return packet
+
+
+def Send_PUBLISH_to_clients(server, conn, addr, dup_flag, retain_flag, topic_name, message):
+    for key, value in server.clients.items():
+        OK = False
+        topic_qos = None
+        for topic in value.topics:
+            if topic_name == topic[0]:
+                OK = True
+                topic_qos = topic[1]
+        if not OK:
+            return
+
+        if topic_qos == 0:
+            new_packet = generatePUBLISHPacket(conn, addr, dup_flag, topic_qos, retain_flag, topic_name, message)
+        elif topic_qos == 1:
+            packet_id = server.nex_packet_id()
+            new_packet = generatePUBLISHPacket(conn, addr, dup_flag, topic_qos, retain_flag, topic_name, message, packet_id)
+            # TODO stocheaza si trimite iar daca nu vine PUBACK
+        elif topic_qos == 2:
+            packet_id = server.nex_packet_id()
+            new_packet = generatePUBLISHPacket(conn, addr, dup_flag, topic_qos, retain_flag, topic_name, message, packet_id)
+            # TODO stocheaza si trimite iar daca nu vine PUBREC
+        else:
+            conn.close()
+            return
+
+        server.sendPacket(new_packet)
+
+
 
 def HandleCONNECT(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------') 
@@ -230,31 +266,6 @@ def HandleCONNECT(server, packet):
 
     #printLog('END-PACKET -> CONNECT', '--------------------------------------------------------------')
 
-def Send_PUBLISH_to_clients(server, conn, addr, dup_flag, retain_flag, topic_name, message):
-    for key, value in server.clients.items():
-        OK = False
-        topic_qos = None
-        for topic in value.topics:
-            if topic_name == topic[0]:
-                OK = True
-                topic_qos = topic[1]
-        if not OK:
-            return
-
-        if topic_qos == 0:
-            new_packet = generatePUBLISHPacket(conn, addr, dup_flag, topic_qos, retain_flag, topic_name, message)
-        elif topic_qos == 1:
-            new_packet = generatePUBLISHPacket(conn, addr, dup_flag, topic_qos, retain_flag, topic_name, message, server.nex_packet_id())
-            # TODO stocheaza si trimite iar daca nu vine PUBACK
-        elif topic_qos == 2:
-            pass
-        else:
-            conn.close()
-            return
-
-        server.sendPacket(new_packet)
-
-
 def HandlePUBLISH(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
 
@@ -278,8 +289,16 @@ def HandlePUBLISH(server, packet):
     message = packet.data[offset:].decode('ascii')
 
     # aici incepe handle ul
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    client_id = server.match_client_conn[packet.addr]
+    entry = (message, client_id, packet.addr[0], packet.addr[1], qos, (retain_flag == 1), timestamp)
     if not (topic_name in server.topics.keys()):
-        server.topics[topic_name] = deque()
+        server.topics[topic_name] = deque(entry)
+    else:
+        server.topics[topic_name].append(entry)
+        if len(server.topics[topic_name]) > MAX_LAST_TOPIC_ENTRIES:
+            server.topics[topic_name].popleft()
+
 
     if qos == 0:
         pass
@@ -295,6 +314,8 @@ def HandlePUBLISH(server, packet):
 
     Send_PUBLISH_to_clients(server, packet.conn, packet.addr, 0, 0, topic_name, message)
 
+
+
 def HandlePUBREL(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
 
@@ -304,6 +325,19 @@ def HandlePUBREL(server, packet):
 
     to_send_packet = generatePUBCOMPPacket(packet.conn, packet.addr, packet_id)
     server.sendPacket(to_send_packet)
+
+def HandlePUBREC(server, packet):
+    printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
+
+    (rlOffset, rlLen) = getPacketRemainingLength(packet)
+    offset = rlOffset
+    packet_id = struct.unpack('!H', packet.data[offset: offset + 2])[0]
+
+    to_send_packet = generatePUBRELPacket(packet.conn, packet.addr, packet_id)
+    server.sendPacket(to_send_packet)
+
+def HandlePUBCOMP(server, packet):
+    printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')
 
 def HandlePUBACK(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '----------------------------------------------------------')

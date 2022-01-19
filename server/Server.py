@@ -14,15 +14,16 @@ class Server:
         self.sock = None
 
         # configs
-        self.running = False        # state-ul generic al serverului
-        self.listenThread = None    # thread pentru ascultat conexiuni
-        self.clockThread = None     # thread pentru timer
+        self.running = False  # state-ul generic al serverului
+        self.listenThread = None  # thread pentru ascultat conexiuni
+        self.connectionThreads = []  # threaduri pentru conexiunile cu clientii
+        self.clockThread = None  # thread pentru timer
 
         # server side stuff
-        self.topics = {}            # {topic_name, coada de string-uri pentru ultimele 10 valori}
-        self.clients = {}           # {client_id, Client}
-        self.credentials = {}       # {user, pass}
-        self.match_client_conn = {} # {conn, client_id}
+        self.topics = {}  # {topic_name, coada de string-uri pentru ultimele 10 valori}
+        self.clients = {}  # {client_id, Client}
+        self.credentials = {}  # {user, pass}
+        self.match_client_conn = {}  # {conn, client_id}
 
         self.read_users_and_passwords()
         self.read_topics()
@@ -48,7 +49,11 @@ class Server:
         self.clockThread.running = False
 
         for key, value in self.clients.items():
+            value.conn.shutdown(socket.SHUT_RD)
             value.conn.close()
+
+        for thread in self.connectionThreads:
+            thread.join()
 
         self.sock.close()
         self.clockThread.join()
@@ -70,7 +75,9 @@ class Server:
             try:
                 (conn, addr) = self.sock.accept()
                 printLog('CONN', 'Server connected to ' + str(addr))
-                threading.Thread(target=self.handleConnection, args=(conn, addr)).start()
+                thread = threading.Thread(target=self.handleConnection, args=(conn, addr))
+                self.connectionThreads.append(thread)
+                thread.start()
             except:
                 if conn:
                     conn.close()
@@ -81,7 +88,7 @@ class Server:
             try:
                 data = conn.recv(1024)
             except:
-                pass
+                break
 
             if not data:
                 break
@@ -111,6 +118,10 @@ class Server:
                     HandlePUBACK(self, currentPacket)
                 case PACKET_TYPE.PUBREL:
                     HandlePUBREL(self, currentPacket)
+                case PACKET_TYPE.PUBREC:
+                    HandlePUBREC(self, currentPacket)
+                case PACKET_TYPE.PUBCOMP:
+                    HandlePUBCOMP(self, currentPacket)
 
                 case _:  # default
                     printLog('ERROR', 'Invalid Packet: ' + packet_type.name)
@@ -124,12 +135,13 @@ class Server:
             packet.conn.sendall(packet.data)
         except:
             pass
+
     def read_users_and_passwords(self):
         file_path = CURRENT_PATH + '\\' + USERS_FILE_NAME
         file = open(file_path, "r")
         lines = file.read().splitlines()
 
-        for usr, pas in zip(*[iter(lines)]*2):
+        for usr, pas in zip(*[iter(lines)] * 2):
             usr = cryptocode.decrypt(usr, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
             pas = cryptocode.decrypt(pas, "7804FCE44075FD6F8A014E31665B1E1E56BC16BE")
             self.credentials[usr] = pas
@@ -142,13 +154,13 @@ class Server:
         lines = file.read().splitlines()
 
         for topic in lines:
-            self.topics[topic] = deque(("aaaaa", "bbbbb", "ccccc"))
+            self.topics[topic] = deque()
 
         file.close()
 
     def nex_packet_id(self):
         if (self.packet_id == (1 << 16)):
-            self.packet_id = 7777 # hazul lui
+            self.packet_id = 7777  # hazul lui
         self.packet_id += 1
         return (self.packet_id)
 

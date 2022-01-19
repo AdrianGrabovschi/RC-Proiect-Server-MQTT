@@ -1,9 +1,14 @@
+import struct
+import socket
+
 from server.ServerInstance import server
 from interface.Notebook_Page import *
 from interface.Interface_Utils import *
 from tkinter.ttk import *
 from tkinter import *
 from Utils import printLog
+
+from server.PacketHandler import generateDISCONNECTPacket
 
 class Server_Info(Notebook_Page):
 
@@ -83,3 +88,12 @@ class Server_Info(Notebook_Page):
     def disconnect_client(self):
         #TODO disconnect handle
         printLog('DISCONNECT', self.to_be_disconnected)
+        client_id = self.to_be_disconnected
+
+        server.clients[client_id].conn.shutdown(socket.SHUT_RD)
+        server.clients[client_id].conn.close()
+        # packet = generateDISCONNECTPacket(server.clients[client_id].conn, server.clients[client_id].addr)
+        # server.sendPacket(packet)
+
+        del server.match_client_conn[server.clients[client_id].addr]
+        del server.clients[client_id]

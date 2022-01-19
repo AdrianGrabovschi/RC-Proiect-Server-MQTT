@@ -4,6 +4,7 @@ from interface.Interface_Utils import *
 from tkinter.ttk import *
 from tkinter import *
 
+
 class Topic_Info(Notebook_Page):
 
     def __init__(self, notebook):
@@ -21,7 +22,7 @@ class Topic_Info(Notebook_Page):
         self.show_topics()
 
     def show_topics(self, arg=''):
-        columns = ['Message']
+        columns = ['Message', 'Client_ID', 'IP', 'PORT', 'QoS', 'Retain', 'Timestamp']
 
         if self.tree:
             self.tree.destroy()
@@ -32,15 +33,13 @@ class Topic_Info(Notebook_Page):
 
         for column in columns:
             self.tree.heading(column, text=column)
-            self.tree.column(column, minwidth=0, width=(int)((WINDOW_WIDTH * 0.75) / len(columns)), stretch=NO)
+            self.tree.column(column, minwidth=0, width=(int)((WINDOW_WIDTH * 0.80) / len(columns)), stretch=NO)
         # self.tree.column(columns[0], width=0)
 
-        topic = server.topics['topic1']
+        topic = server.topics[self.dd_topic.get()]
         if len(topic) != 0:
-            for msg in topic:
-                self.tree.insert('', 'end', values=msg)
+            for entry in topic:
+                self.tree.insert('', 'end', values=entry)
 
-
-    def dummy(self):
-        print("server_info_dummy")
+    def dummy(self, arg):
         pass
