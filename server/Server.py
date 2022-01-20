@@ -56,15 +56,12 @@ class Server:
 
         # opreste conextiunea cu toti clientii conectati
         for key, value in self.clients.items():
-            value.conn.shutdown(socket.SHUT_RDWR)
-            value.conn.close()
+            if value.activeSession:
+                value.conn.shutdown(socket.SHUT_RDWR)
+                value.conn.close()
 
         # opreste socket ul de listen
         self.sock.close()
-
-        # asteapta sa se inchida corect toate thread-urile de handle cu clientii
-        for thread in self.connectionThreads:
-            thread.join()
 
         # asteapta sa se inchida corecte thread-urile auxiliare
         self.clockThread.join()
@@ -115,13 +112,16 @@ class Server:
         self.timeout_clients.append((client_id, time.time()))
 
         # inchide socketul de comunicare cu respectivul client
-        self.clients[client_id].conn.shutdown(socket.SHUT_RDWR)
-        self.clients[client_id].conn.close()
+        if self.clients[client_id].activeSession:
+            self.clients[client_id].conn.shutdown(socket.SHUT_RDWR)
+            self.clients[client_id].conn.close()
 
         # sterge sesiunea curenta a clientului respectiv
         if client_id in self.clients:
-            del self.match_client_conn[self.clients[client_id].addr]
-            del self.clients[client_id]
+            # del self.match_client_conn[self.clients[client_id].addr]
+            self.clients[client_id].conn = None
+            self.clients[client_id].conn = None
+            self.clients[client_id].activeSession = False
 
 
     def listen(self):
@@ -138,8 +138,7 @@ class Server:
                 self.connectionThreads.append(thread)
                 thread.start()
             except:
-                if conn:
-                    conn.close()
+                pass
                 return
 
     def handleConnection(self, conn, addr):

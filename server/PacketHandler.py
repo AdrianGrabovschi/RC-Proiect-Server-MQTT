@@ -200,6 +200,7 @@ def Send_PUBLISH_to_clients(server, dup_flag, retain_flag, topic_name, message):
     for key, value in server.clients.items():
         OK = False
         topic_qos = None
+
         for topic in value.topics:
             if topic_name == topic[0]:
                 OK = True
@@ -291,18 +292,36 @@ def HandleCONNECT(server, packet):
     if not ((user_name in server.credentials) and (server.credentials[user_name] == password)):
         return_code = CONNACK_RETURN_CODES.BAD_CREDENTIALS.value
 
-    if client_id in server.clients:
+    if client_id in server.clients and server.clients[client_id].activeSession:
         return_code = CONNACK_RETURN_CODES.IDENTIFIER_REJECTED.value
 
-    to_send_packet = generateCONNACKPacket(packet.conn, packet.addr, sp_connack_bit, return_code)  # 0 -> ACCEPTED
-    server.sendPacket(to_send_packet)
 
     # daca e totul ca la abecedar activam sesiunea
     if return_code == CONNACK_RETURN_CODES.ACCEPTED.value:
-        new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name)
-        server.clients[client_id] = new_client
-        server.match_client_conn[packet.addr] = client_id
+        if client_id in server.clients:
+            if conn_flags & CONNECTION_FLAGS.CLEAN_SESSION.value:
+                # del server.match_client_conn[server.clients[client_id].addr]
+                del server.clients[client_id]
 
+                new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name)
+                server.clients[client_id] = new_client
+                server.match_client_conn[packet.addr] = client_id
+
+                sp_connack_bit = 0
+            else:
+                server.clients[client_id].activeSession = True
+                server.clients[client_id].conn = packet.conn
+                server.clients[client_id].addr = packet.addr
+                server.match_client_conn[packet.addr] = client_id
+                sp_connack_bit = 1
+        else:
+            new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name)
+            server.clients[client_id] = new_client
+            server.match_client_conn[packet.addr] = client_id
+            sp_connack_bit = 0
+
+    to_send_packet = generateCONNACKPacket(packet.conn, packet.addr, sp_connack_bit, return_code)  # 0 -> ACCEPTED
+    server.sendPacket(to_send_packet)
 
 def HandlePUBLISH(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '---------------------------------------------------------')
@@ -355,7 +374,7 @@ def HandlePUBLISH(server, packet):
         to_send_packet = generatePUBRECPacket(packet.conn, packet.addr, packet_id)
         server.sendPacket(to_send_packet)
     else:
-        packet.conn.close()
+        server.disconnect_client(client_id)
         return
 
     # foloseste functia aia smechera generica facuta din lenea de a face alta functie pentru publish la subscribe
@@ -418,8 +437,11 @@ def HandleDISCONNECT(server, packet):
     client_id = server.match_client_conn[packet.addr]
 
     if client_id in server.clients:
-        del server.match_client_conn[server.clients[client_id].addr]
-        del server.clients[client_id]
+        # del server.match_client_conn[server.clients[client_id].addr]
+        server.clients[client_id].conn = None
+        server.clients[client_id].conn = None
+        server.clients[client_id].activeSession = False
+
 
 def HandleSUBSCRIBE(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '---------------------------------------------------------')

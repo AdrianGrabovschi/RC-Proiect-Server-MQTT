@@ -37,7 +37,7 @@ class Server_Info(Notebook_Page):
         self.show_cients()
 
     def show_cients(self, arg=''):
-        columns = ['Client_ID', 'User', 'IP', 'PORT']
+        columns = ['Client_ID', 'User', 'IP', 'PORT', 'Session']
 
         if self.tree:
             self.tree.destroy()
@@ -53,7 +53,7 @@ class Server_Info(Notebook_Page):
 
         for key, client in server.clients.items():
             if self.dd_user.get() == 'all' or client.userName == self.dd_user.get():
-                self.tree.insert('', 'end', values=(client.clientID, client.userName, *client.addr))
+                self.tree.insert('', 'end', values=(client.clientID, client.userName, *client.addr, client.activeSession))
 
     def select_client(self, arg):
         self.selected_client = self.tree.focus()
