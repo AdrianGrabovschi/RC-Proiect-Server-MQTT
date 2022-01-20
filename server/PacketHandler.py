@@ -14,6 +14,16 @@ class Packet:
         self.data = _data
         self.packet_type = _packet_type
 
+class ResendEntry:
+    def __init__(self, conn, addr, topic_name, message, packet_id, qos):
+        self.sec_cnt    = 0
+        self.send_cnt   = 0
+        self.conn       = conn
+        self.addr       = addr
+        self.topic_name = topic_name
+        self.message    = message
+        self.packet_id  = packet_id
+        self.qos        = qos
 
 class PACKET_TYPE(Enum):
     RESERVED = 0
@@ -175,13 +185,13 @@ def Send_PUBLISH_to_one_client(server, conn, addr, dup_flag, retain_flag, topic_
     elif qos == 1:
         packet_id = server.nex_packet_id()
         new_packet = generatePUBLISHPacket(conn, addr, dup_flag, qos, retain_flag, topic_name, message, packet_id)
-        # TODO stocheaza si trimite iar daca nu vine PUBACK
+        server.publish_packet_queue.append(ResendEntry(conn, addr, topic_name, message, packet_id, qos))
     elif qos == 2:
         packet_id = server.nex_packet_id()
         new_packet = generatePUBLISHPacket(conn, addr, dup_flag, qos, retain_flag, topic_name, message, packet_id)
-        # TODO stocheaza si trimite iar daca nu vine PUBREC
+        server.publish_packet_queue.append(ResendEntry(conn, addr, topic_name, message, packet_id, qos))
     else:
-        conn.close()
+        server.disconnect_client(server.match_client_conn[addr])
         return
     server.sendPacket(new_packet)
 
@@ -374,6 +384,9 @@ def HandlePUBREC(server, packet):
     to_send_packet = generatePUBRELPacket(packet.conn, packet.addr, packet_id)
     server.sendPacket(to_send_packet)
 
+    # elimina retransmisia daca a venit puckack-ul pentru publish ul respectiv
+    server.publish_packet_queue = [x for x in server.publish_packet_queue if not packet_id == x.packet_id]
+
 
 def HandlePUBCOMP(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '---------------------------------------------------------')
@@ -381,7 +394,14 @@ def HandlePUBCOMP(server, packet):
 
 def HandlePUBACK(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '---------------------------------------------------------')
-    # TODO daca nu vine PUBACK trebuie implementat un handler care trimite iar PUBLISH ul ala dupa un interval
+
+    (rlOffset, rlLen) = getPacketRemainingLength(packet)
+    offset = rlOffset
+    packet_id = struct.unpack('!H', packet.data[offset: offset + 2])[0]
+
+    # elimina retransmisia daca a venit puckack-ul pentru publish ul respectiv
+    server.publish_packet_queue = [x for x in server.publish_packet_queue if not packet_id == x.packet_id]
+
 
 
 def HandlePINGREQ(server, packet):
@@ -397,8 +417,9 @@ def HandleDISCONNECT(server, packet):
 
     client_id = server.match_client_conn[packet.addr]
 
-    del server.match_client_conn[server.clients[client_id].addr]
-    del server.clients[client_id]
+    if client_id in server.clients:
+        del server.match_client_conn[server.clients[client_id].addr]
+        del server.clients[client_id]
 
 def HandleSUBSCRIBE(server, packet):
     printLog('HANDLE-PACKET -> ' + packet.packet_type.name, '---------------------------------------------------------')

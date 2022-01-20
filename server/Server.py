@@ -14,19 +14,20 @@ class Server:
         self.sock = None
 
         # configs
-        self.running = False  # state-ul generic al serverului
-        self.listenThread = None  # thread pentru ascultat conexiuni
-        self.connectionThreads = []  # threaduri pentru conexiunile cu clientii
-        self.clockThread = None  # thread pentru timer
+        self.running = False            # state-ul generic al serverului
+        self.listenThread = None        # thread pentru ascultat conexiuni
+        self.connectionThreads = []     # threaduri pentru conexiunile cu clientii
+        self.clockThread = None         # thread pentru timer
 
         # server side stuff
-        self.topics = {}  # {topic_name, coada de string-uri pentru ultimele 10 valori}
-        self.topics_retain_msg = {} #{topic_name, topic_msg}
-        self.clients = {}  # {client_id, Client}
-        self.credentials = {}  # {user, pass}
-        self.match_client_conn = {}  # {conn, client_id}
+        self.topics = {}                # {topic_name, coada de string-uri pentru ultimele 10 valori}
+        self.topics_retain_msg = {}     #{topic_name, topic_msg}
+        self.clients = {}               # {client_id, Client}
+        self.credentials = {}           # {user, pass}
+        self.match_client_conn = {}     # {conn, client_id}
 
-        self.timeout_clients = [] # array pentru gestionat timeout-ul clientilor pana la o a doua conectares
+        self.timeout_clients = []       # array pentru gestionat timeout-ul clientilor pana la o a doua conectare
+        self.publish_packet_queue = []  # retine packetele care trebuie retransmise (ResendEntry)
 
         self.read_users_and_passwords()
         self.read_topics()
@@ -71,6 +72,27 @@ class Server:
         printLog('INFO', 'Closing Server...', True)
 
     def tick(self):
+        #[print(str(x.addr) + " -> " + str(x.sec_cnt)) for x in self.publish_packet_queue]
+
+        for entry in self.publish_packet_queue:
+            if entry.sec_cnt > RESEND_TIMEOUT:
+                entry.sec_cnt   = 0
+                entry.send_cnt += 1
+                new_packet = None
+                if entry.qos == 1:
+                    new_packet = generatePUBLISHPacket(entry.conn, entry.addr, 1, entry.qos, 0,
+                                                       entry.topic_name, entry.message, entry.packet_id)
+                elif entry.qos == 2:
+                    new_packet = generatePUBLISHPacket(entry.conn, entry.addr, 1, entry.qos, 0,
+                                                       entry.topic_name, entry.message, entry.packet_id)
+                if new_packet:
+                    self.sendPacket(new_packet)
+            else:
+                entry.sec_cnt += 1
+
+
+        # actualizeaza pachetele restante
+        self.publish_packet_queue = list(filter(lambda entry: not (entry.send_cnt > RESEND_MAX), self.publish_packet_queue))
 
         # actualizeaza black list-ul de timeout a clientilor
         self.timeout_clients = list(filter(lambda entry: not ((time.time() - entry[1]) > DISCONNECT_TIMEOUT), self.timeout_clients))
@@ -97,8 +119,9 @@ class Server:
         self.clients[client_id].conn.close()
 
         # sterge sesiunea curenta a clientului respectiv
-        del self.match_client_conn[self.clients[client_id].addr]
-        del self.clients[client_id]
+        if client_id in self.clients:
+            del self.match_client_conn[self.clients[client_id].addr]
+            del self.clients[client_id]
 
 
     def listen(self):
@@ -124,7 +147,7 @@ class Server:
             try:
                 data = conn.recv(1024)
             except:
-                printLog('CONN', str(addr) + ' disconnected from server')
+                printLog('CONN', str(addr) + ' disconnected from serverr')
                 return
 
             if not data:
