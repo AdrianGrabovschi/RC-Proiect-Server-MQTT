@@ -103,6 +103,8 @@ class Server:
 
         # deconecteaza clientii selectati
         for x in to_be_disconnected:
+            if x.will_flag:
+                Send_PUBLISH_to_clients(self,0,0,self.clients[client_id].will_topic,self.clients[client_id].will_message)
             self.disconnect_client(x)
 
     def disconnect_client(self, client_id):

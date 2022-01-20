@@ -258,6 +258,7 @@ def HandleCONNECT(server, packet):
     # WILL_TOPIC
     will_topic = ''
     will_message = ''
+    will_flag = conn_flags & CONNECTION_FLAGS.WILL_FLAG.value
     if conn_flags & CONNECTION_FLAGS.WILL_FLAG.value:
         offset, will_topic = parsePacketString(packet.data, offset)
         printLog("will_topic", will_topic)
@@ -303,7 +304,7 @@ def HandleCONNECT(server, packet):
                 # del server.match_client_conn[server.clients[client_id].addr]
                 del server.clients[client_id]
 
-                new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name)
+                new_client = Client(packet.conn, packet.addr, client_id, will_flag, will_topic, will_message, keep_alive, user_name)
                 server.clients[client_id] = new_client
                 server.match_client_conn[packet.addr] = client_id
 
@@ -315,7 +316,7 @@ def HandleCONNECT(server, packet):
                 server.match_client_conn[packet.addr] = client_id
                 sp_connack_bit = 1
         else:
-            new_client = Client(packet.conn, packet.addr, client_id, keep_alive, user_name)
+            new_client = Client(packet.conn, packet.addr, client_id, will_flag, will_topic, will_message, keep_alive, user_name)
             server.clients[client_id] = new_client
             server.match_client_conn[packet.addr] = client_id
             sp_connack_bit = 0
